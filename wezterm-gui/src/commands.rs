@@ -2011,6 +2011,14 @@ pub fn derive_command_from_key_assignment(action: &KeyAssignment) -> Option<Comm
             menubar: &["Edit"],
             icon: None,
         },
+        ShowContextMenu => CommandDef {
+            brief: "Show Context Menu".into(),
+            doc: "Shows a context menu with pane actions like split and close".into(),
+            keys: vec![],
+            args: &[ArgType::ActivePane],
+            menubar: &["Edit"],
+            icon: Some("md_menu"),
+        },
     })
 }
 
@@ -2054,6 +2062,7 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         ActivateCopyMode,
         ClearKeyTableStack,
         ActivateCommandPalette,
+        ShowContextMenu,
         // ----------------- View
         DecreaseFontSize,
         IncreaseFontSize,
