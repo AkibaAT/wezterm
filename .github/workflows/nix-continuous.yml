@@ -15,7 +15,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.repository == 'wezterm/wezterm'
+    if: github.repository == 'AkibaAT/wezterm'
     steps:
       - uses: actions/checkout@v6
 

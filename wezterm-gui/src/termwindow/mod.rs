@@ -72,6 +72,7 @@ pub mod background;
 pub mod box_model;
 pub mod charselect;
 pub mod clipboard;
+pub mod contextmenu;
 pub mod keyevent;
 pub mod modal;
 mod mouseevent;
@@ -399,7 +400,7 @@ pub struct TermWindow {
     is_click_to_focus_window: bool,
     last_mouse_coords: (usize, i64),
     window_drag_position: Option<MouseEvent>,
-    current_mouse_event: Option<MouseEvent>,
+    pub current_mouse_event: Option<MouseEvent>,
     prev_cursor: PrevCursorPos,
     last_scroll_info: RenderableDimensions,
 
@@ -3157,6 +3158,17 @@ impl TermWindow {
             }
             ActivateCommandPalette => {
                 let modal = crate::termwindow::palette::CommandPalette::new(self);
+                self.set_modal(Rc::new(modal));
+            }
+            ShowContextMenu => {
+                // Get the mouse position from the current event, or use a default position
+                let (mouse_x, mouse_y) = self
+                    .current_mouse_event
+                    .as_ref()
+                    .map(|e| (e.coords.x, e.coords.y))
+                    .unwrap_or((100, 100));
+                let modal =
+                    crate::termwindow::contextmenu::ContextMenu::new(self, mouse_x, mouse_y);
                 self.set_modal(Rc::new(modal));
             }
             PromptInputLine(args) => self.show_prompt_input_line(args),

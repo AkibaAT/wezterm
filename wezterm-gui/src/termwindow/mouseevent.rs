@@ -60,6 +60,36 @@ impl super::TermWindow {
 
     pub fn mouse_event_impl(&mut self, event: MouseEvent, context: &dyn WindowOps) {
         log::trace!("{:?}", event);
+
+        // Route mouse events to modal if one is active
+        if let Some(modal) = self.get_modal() {
+            self.current_mouse_event.replace(event.clone());
+            let term_event = wezterm_term::MouseEvent {
+                kind: match event.kind {
+                    WMEK::Move => wezterm_term::input::MouseEventKind::Move,
+                    WMEK::Press(_) => wezterm_term::input::MouseEventKind::Press,
+                    WMEK::Release(_) => wezterm_term::input::MouseEventKind::Release,
+                    WMEK::VertWheel(_) | WMEK::HorzWheel(_) => {
+                        wezterm_term::input::MouseEventKind::Press
+                    }
+                },
+                button: match event.kind {
+                    WMEK::Press(ref press) | WMEK::Release(ref press) => mouse_press_to_tmb(press),
+                    _ => TMB::None,
+                },
+                x: event.coords.x as usize,
+                y: event.coords.y as i64,
+                x_pixel_offset: 0,
+                y_pixel_offset: 0,
+                modifiers: event.modifiers,
+            };
+            if let Err(err) = modal.mouse_event(term_event, self) {
+                log::error!("Error dispatching mouse to modal: {err:#}");
+            }
+            context.invalidate();
+            return;
+        }
+
         let pane = match self.get_active_pane_or_overlay() {
             Some(pane) => pane,
             None => return,
