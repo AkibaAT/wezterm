@@ -1,8 +1,6 @@
 name: nix_continuous
 
 on:
-  schedule:
-    - cron: "10 3 * * *"
   workflow_dispatch:
   push:
     branches:
@@ -28,13 +26,5 @@ jobs:
         with:
           flake-lock-path: ./nix/flake.lock
           ignore-missing-flake-lock: false
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v16
-        with:
-          name: wezterm
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - name: Build default package
-        run: |
-          nix build ./nix --json \
-          | jq -r '.[].outputs | to_entries[].value' \
-          | cachix push wezterm
+        run: nix build ./nix
