@@ -1,8 +1,6 @@
 name: nix_continuous
 
 on:
-  schedule:
-    - cron: "10 3 * * *"
   workflow_dispatch:
   push:
     branches:
