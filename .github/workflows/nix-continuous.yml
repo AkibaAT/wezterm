@@ -1,8 +1,6 @@
 name: Nix / Continuous Build
 
 on:
-  schedule:
-    - cron: "10 3 * * *" # Every night at 3:10am
   workflow_dispatch:
   push:
     branches:
@@ -33,19 +31,5 @@ jobs:
           flake-lock-path: ./nix/flake.lock
           ignore-missing-flake-lock: false
 
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v16
-        with:
-          name: wezterm
-          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-
       - name: Build default package
-        run: |
-          nix build ./nix --json > result.json
-
-      - name: Push to Cachix
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-        run: |
-          cat result.json \
-          | jq -r '.[].outputs | to_entries[].value' \
-          | cachix push wezterm
+        run: nix build ./nix

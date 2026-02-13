@@ -1,9 +1,6 @@
 name: Nix / Update flake.lock
 on:
   workflow_dispatch:
-  schedule:
-    # once a month
-    - cron: '0 0 1 * *'
 
 jobs:
   lockfile:
@@ -27,10 +24,8 @@ jobs:
       - name: Update flake.lock
         uses: DeterminateSystems/update-flake-lock@v28
         with:
-          token: "${{ secrets.FLAKE_LOCK_GH_PAT }}"
           pr-title: 'nix: Update flake.lock'
           pr-labels: |
             dependencies
             automated
-          pr-reviewers: bew
           path-to-flake-dir: 'nix/'
