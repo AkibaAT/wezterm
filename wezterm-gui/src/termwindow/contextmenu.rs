@@ -26,22 +26,27 @@ enum MenuItem {
     Separator,
 }
 
+/// Actual pixel bounds of a rendered row, extracted from the computed element tree
+#[derive(Clone, Default)]
+struct RowBounds {
+    y: f32,
+    height: f32,
+}
+
 pub struct ContextMenu {
     element: RefCell<Option<Vec<ComputedElement>>>,
     /// Currently selected/hovered row (-1 = none)
     selected_row: RefCell<i32>,
     items: Vec<MenuItem>,
-    /// Actual rendered position of menu (in pixels), set after first render
-    menu_x: RefCell<f32>,
-    menu_y: RefCell<f32>,
     /// Initial mouse position (used for computing menu position)
     initial_mouse_x: f32,
     initial_mouse_y: f32,
-    /// Row height in pixels (set after first render)
-    row_height: RefCell<f32>,
-    /// Menu dimensions (set after first render)
+    /// Actual rendered bounds of menu and each row, set after compute
+    menu_x: RefCell<f32>,
+    menu_y: RefCell<f32>,
     menu_width: RefCell<f32>,
     menu_height: RefCell<f32>,
+    row_bounds: RefCell<Vec<RowBounds>>,
 }
 
 impl ContextMenu {
@@ -149,9 +154,9 @@ impl ContextMenu {
             menu_y: RefCell::new(0.0),
             initial_mouse_x: mouse_x as f32,
             initial_mouse_y: mouse_y as f32,
-            row_height: RefCell::new(0.0),
             menu_width: RefCell::new(0.0),
             menu_height: RefCell::new(0.0),
+            row_bounds: RefCell::new(Vec::new()),
         }
     }
 
@@ -161,7 +166,7 @@ impl ContextMenu {
         selected_row: i32,
         initial_mouse_x: f32,
         initial_mouse_y: f32,
-    ) -> anyhow::Result<(Vec<ComputedElement>, f32, f32, f32, f32, f32)> {
+    ) -> anyhow::Result<(Vec<ComputedElement>, f32, f32, f32, f32, Vec<RowBounds>)> {
         let font = term_window
             .fonts
             .command_palette_font()
@@ -332,14 +337,32 @@ impl ContextMenu {
             &element,
         )?;
 
+        // Extract actual row bounds from the computed element tree.
+        // The top-level computed element contains children, one per menu item.
+        let row_bounds = Self::extract_row_bounds(&computed);
+
         Ok((
             vec![computed],
-            row_height,
             menu_x,
             menu_y,
             menu_width,
             menu_height,
+            row_bounds,
         ))
+    }
+
+    /// Extract the actual pixel bounds of each child row from the computed element.
+    fn extract_row_bounds(computed: &ComputedElement) -> Vec<RowBounds> {
+        let mut bounds = Vec::new();
+        if let ComputedElementContent::Children(ref kids) = computed.content {
+            for kid in kids {
+                bounds.push(RowBounds {
+                    y: kid.bounds.min_y(),
+                    height: kid.bounds.height(),
+                });
+            }
+        }
+        bounds
     }
 
     /// Check if a given row index is a selectable entry (not a separator)
@@ -408,41 +431,29 @@ impl ContextMenu {
         }
     }
 
-    /// Calculate which menu row is at the given pixel coordinates
-    /// Returns -1 if outside the menu
+    /// Calculate which menu row is at the given pixel coordinates.
+    /// Uses actual rendered bounds from the computed element tree.
+    /// Returns -1 if outside the menu.
     fn row_at_coords(&self, x: f32, y: f32) -> i32 {
         let menu_x = *self.menu_x.borrow();
         let menu_y = *self.menu_y.borrow();
         let menu_width = *self.menu_width.borrow();
         let menu_height = *self.menu_height.borrow();
-        let row_height = *self.row_height.borrow();
-
-        if row_height <= 0.0 {
-            return -1;
-        }
 
         // Check if coordinates are within menu bounds
         if x < menu_x || x > menu_x + menu_width || y < menu_y || y > menu_y + menu_height {
             return -1;
         }
 
-        // Calculate row:
-        // - Outer margin/padding: ~0.5 cells
-        // - Each item height: ~1.2 cells (text + 0.2 cells padding)
-        let padding_top = row_height * 0.75;
-        let item_height = row_height * 1.2;
-        let relative_y = y - menu_y - padding_top;
-
-        if relative_y < 0.0 {
-            return 0; // Click in top padding area -> first item
+        // Use actual computed row bounds for hit testing
+        let row_bounds = self.row_bounds.borrow();
+        for (idx, rb) in row_bounds.iter().enumerate() {
+            if y >= rb.y && y < rb.y + rb.height {
+                return idx as i32;
+            }
         }
 
-        let row = (relative_y / item_height) as i32;
-        if row >= 0 && row < self.items.len() as i32 {
-            row
-        } else {
-            -1
-        }
+        -1
     }
 }
 
@@ -524,7 +535,7 @@ impl Modal for ContextMenu {
         term_window: &mut TermWindow,
     ) -> anyhow::Result<Ref<'_, [ComputedElement]>> {
         if self.element.borrow().is_none() {
-            let (element, row_height, menu_x, menu_y, menu_width, menu_height) = Self::compute(
+            let (element, menu_x, menu_y, menu_width, menu_height, row_bounds) = Self::compute(
                 term_window,
                 &self.items,
                 *self.selected_row.borrow(),
@@ -532,11 +543,11 @@ impl Modal for ContextMenu {
                 self.initial_mouse_y,
             )?;
             self.element.borrow_mut().replace(element);
-            *self.row_height.borrow_mut() = row_height;
             *self.menu_x.borrow_mut() = menu_x;
             *self.menu_y.borrow_mut() = menu_y;
             *self.menu_width.borrow_mut() = menu_width;
             *self.menu_height.borrow_mut() = menu_height;
+            *self.row_bounds.borrow_mut() = row_bounds;
         }
         Ok(Ref::map(self.element.borrow(), |v| {
             v.as_ref().unwrap().as_slice()
