@@ -156,9 +156,9 @@ pub enum TermWindowNotif {
 pub enum UIItemType {
     TabBar(TabBarItem),
     CloseTab(usize),
-    AboveScrollThumb,
-    ScrollThumb,
-    BelowScrollThumb,
+    AboveScrollThumb(PaneId),
+    ScrollThumb(PaneId),
+    BelowScrollThumb(PaneId),
     Split(PositionedSplit),
 }
 
@@ -402,7 +402,6 @@ pub struct TermWindow {
     window_drag_position: Option<MouseEvent>,
     pub current_mouse_event: Option<MouseEvent>,
     prev_cursor: PrevCursorPos,
-    last_scroll_info: RenderableDimensions,
 
     tab_state: RefCell<HashMap<TabId, TabState>>,
     pane_state: RefCell<HashMap<PaneId, PaneState>>,
@@ -720,7 +719,6 @@ impl TermWindow {
             current_mouse_event: None,
             current_modifier_and_leds: Default::default(),
             prev_cursor: PrevCursorPos::new(),
-            last_scroll_info: RenderableDimensions::default(),
             tab_state: RefCell::new(HashMap::new()),
             pane_state: RefCell::new(HashMap::new()),
             current_mouse_buttons: vec![],
@@ -1874,18 +1872,8 @@ impl TermWindow {
             return;
         }
 
-        let tab = match self.get_active_pane_or_overlay() {
-            Some(tab) => tab,
-            None => return,
-        };
-
-        let render_dims = tab.get_dimensions();
-        if render_dims == self.last_scroll_info {
-            return;
-        }
-
-        self.last_scroll_info = render_dims;
-
+        // With per-pane scrollbars, any pane's scroll state may have changed,
+        // so always invalidate to ensure all scrollbars are redrawn.
         if let Some(window) = self.window.as_ref() {
             window.invalidate();
         }
