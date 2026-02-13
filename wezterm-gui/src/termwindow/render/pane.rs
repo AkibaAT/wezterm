@@ -221,72 +221,71 @@ impl crate::TermWindow {
             }
         }
 
-        // TODO: we only have a single scrollbar in a single position.
-        // We only update it for the active pane, but we should probably
-        // do a per-pane scrollbar.  That will require more extensive
-        // changes to ScrollHit, mouse positioning, PositionedPane
-        // and tab size calculation.
-        if pos.is_active && self.show_scroll_bar {
-            let thumb_y_offset = top_bar_height as usize + border.top.get();
+        // Per-pane scrollbar: render a scrollbar overlay on each pane
+        if self.show_scroll_bar {
+            let scrollbar_width = cell_width;
+            let pane_pixel_top = top_pixel_y + (pos.top as f32 * cell_height);
+            let pane_pixel_height = pos.height as f32 * cell_height;
+            let pane_pixel_right = padding_left
+                + border.left.get() as f32
+                + ((pos.left + pos.width) as f32 * cell_width);
+            let thumb_x = (pane_pixel_right - scrollbar_width).max(0.0);
 
             let min_height = self.min_scroll_bar_height();
 
             let info = ScrollHit::thumb(
                 &*pos.pane,
                 current_viewport,
-                self.dimensions.pixel_height.saturating_sub(
-                    thumb_y_offset + border.bottom.get() + bottom_bar_height as usize,
-                ),
+                pane_pixel_height as usize,
                 min_height as usize,
             );
-            let abs_thumb_top = thumb_y_offset + info.top;
+            let abs_thumb_top = pane_pixel_top as usize + info.top;
             let thumb_size = info.height;
             let color = palette.scrollbar_thumb.to_linear();
 
-            // Adjust the scrollbar thumb position
-            let config = &self.config;
-            let padding = self.effective_right_padding(&config) as f32;
-
-            let thumb_x = self.dimensions.pixel_width - padding as usize - border.right.get();
-
-            // Register the scroll bar location
+            // Register the scroll bar hit regions
             self.ui_items.push(UIItem {
-                x: thumb_x,
-                width: padding as usize,
-                y: thumb_y_offset,
+                x: thumb_x as usize,
+                width: scrollbar_width as usize,
+                y: pane_pixel_top as usize,
                 height: info.top,
-                item_type: UIItemType::AboveScrollThumb,
+                item_type: UIItemType::AboveScrollThumb(pane_id),
             });
             self.ui_items.push(UIItem {
-                x: thumb_x,
-                width: padding as usize,
+                x: thumb_x as usize,
+                width: scrollbar_width as usize,
                 y: abs_thumb_top,
                 height: thumb_size,
-                item_type: UIItemType::ScrollThumb,
+                item_type: UIItemType::ScrollThumb(pane_id),
             });
             self.ui_items.push(UIItem {
-                x: thumb_x,
-                width: padding as usize,
+                x: thumb_x as usize,
+                width: scrollbar_width as usize,
                 y: abs_thumb_top + thumb_size,
-                height: self
-                    .dimensions
-                    .pixel_height
+                height: (pane_pixel_top as usize + pane_pixel_height as usize)
                     .saturating_sub(abs_thumb_top + thumb_size),
-                item_type: UIItemType::BelowScrollThumb,
+                item_type: UIItemType::BelowScrollThumb(pane_id),
             });
 
-            self.filled_rectangle(
-                layers,
-                2,
-                euclid::rect(
-                    thumb_x as f32,
-                    abs_thumb_top as f32,
-                    padding,
-                    thumb_size as f32,
-                ),
-                color,
-            )
-            .context("filled_rectangle")?;
+            // Draw the thumb
+            let mut thumb_quad = self
+                .filled_rectangle(
+                    layers,
+                    2,
+                    euclid::rect(
+                        thumb_x,
+                        abs_thumb_top as f32,
+                        scrollbar_width,
+                        thumb_size as f32,
+                    ),
+                    color,
+                )
+                .context("scrollbar thumb filled_rectangle")?;
+            thumb_quad.set_hsv(if pos.is_active {
+                None
+            } else {
+                Some(config.inactive_pane_hsb)
+            });
         }
 
         let (selrange, rectangular) = {

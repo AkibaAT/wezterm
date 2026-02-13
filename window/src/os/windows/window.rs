@@ -420,23 +420,24 @@ impl Window {
     ) -> anyhow::Result<HWND> {
         let class_name = wide_string(class_name);
         let h_inst = unsafe { GetModuleHandleW(null()) };
-        let class = WNDCLASSW {
+        let icon = unsafe { LoadIconW(h_inst, MAKEINTRESOURCEW(0x101)) };
+        let class = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
             lpfnWndProc: Some(wnd_proc),
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: h_inst,
-            // FIXME: this resource is specific to the wezterm build and this should
-            // really be made generic for other sorts of windows.
             // The ID is defined in assets/windows/resource.rc
-            hIcon: unsafe { LoadIconW(h_inst, MAKEINTRESOURCEW(0x101)) },
+            hIcon: icon,
             hCursor: null_mut(),
             hbrBackground: null_mut(),
             lpszMenuName: null(),
             lpszClassName: class_name.as_ptr(),
+            hIconSm: icon,
         };
 
-        if unsafe { RegisterClassW(&class) } == 0 {
+        if unsafe { RegisterClassExW(&class) } == 0 {
             let err = IoError::last_os_error();
             match err.raw_os_error() {
                 Some(code)
